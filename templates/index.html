@@ -2,55 +2,190 @@
 <html>
 <head>
   <title>AI Music Generator</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#3a3a7a">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <style>
-    #loading { display: none; color: #007bff; }
-    #error { color: red; display: none; }
-    #player { display: none; margin-top: 20px; }
-  </style>
+  <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
 </head>
 <body>
-  <h1>Generate AI Music</h1>
-  <button id="generateBtn">Generate Music</button>
-  <span id="loading">Generating music, please wait...</span>
-  <div id="error"></div>
-  <audio id="player" controls></audio>
+  <div class="container">
+    <div class="card">
+      <h1>AI Music Generator</h1>
+      <form id="musicForm">
+        <label>Choose instrument(s):</label>
+        <div id="instrumentCheckboxes" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:10px;">
+          <label><input type="checkbox" id="allInstruments" value="ALL"> ALL</label>
+          <label><input type="checkbox" name="instrument" value="Piano"> Piano</label>
+          <label><input type="checkbox" name="instrument" value="Violin"> Violin</label>
+          <label><input type="checkbox" name="instrument" value="Guitar"> Guitar</label>
+          <label><input type="checkbox" name="instrument" value="Flute"> Flute</label>
+          <label><input type="checkbox" name="instrument" value="Trumpet"> Trumpet</label>
+          <label><input type="checkbox" name="instrument" value="Clarinet"> Clarinet</label>
+          <label><input type="checkbox" name="instrument" value="Oboe"> Oboe</label>
+          <label><input type="checkbox" name="instrument" value="Bassoon"> Bassoon</label>
+        </div>
+        <label for="lengthSelect">Music Length:</label>
+        <select id="lengthSelect" name="length">
+          <option value="30">30 seconds</option>
+          <option value="60" selected>1 minute</option>
+          <option value="120">2 minutes</option>
+          <option value="180">3 minutes</option>
+        </select>
+        <button id="generateBtn" type="submit">Generate Music</button>
+      </form>
+      <div id="progressBar" class="progress-bar"><div class="progress"></div></div>
+      <span id="loading">Generating music, please wait...</span>
+      <div id="error"></div>
+      <div id="instrumentDisplay"></div>
+      <audio id="player" controls></audio>
+      <div id="waveform" style="width:100%;margin:20px auto 0 auto;"></div>
+    </div>
+  </div>
   <script>
+    const form = document.getElementById('musicForm');
     const btn = document.getElementById('generateBtn');
     const loading = document.getElementById('loading');
     const errorDiv = document.getElementById('error');
     const player = document.getElementById('player');
+    const progressBar = document.getElementById('progressBar');
+    const progress = document.querySelector('.progress');
+    const instrumentDisplay = document.getElementById('instrumentDisplay');
+    const instrumentCheckboxes = document.getElementById('instrumentCheckboxes');
+    const waveformDiv = document.getElementById('waveform');
+    let wavesurfer = null;
 
-    btn.onclick = async function(e) {
+    let progressInterval = null;
+    let progressValue = 0;
+    const PROGRESS_DURATION = 12000; // ms, adjust to expected generation time
+    const PROGRESS_UPDATE_INTERVAL = 100; // ms
+
+    function startProgressBar() {
+      progressValue = 0;
+      progress.style.width = '0%';
+      progressBar.style.display = 'block';
+      const maxProgress = 99;
+      const step = maxProgress / (PROGRESS_DURATION / PROGRESS_UPDATE_INTERVAL);
+      progressInterval = setInterval(() => {
+        if (progressValue < maxProgress) {
+          progressValue += step;
+          if (progressValue > maxProgress) progressValue = maxProgress;
+          progress.style.width = progressValue + '%';
+        }
+      }, PROGRESS_UPDATE_INTERVAL);
+    }
+
+    function finishProgressBar() {
+      if (progressInterval) clearInterval(progressInterval);
+      progressValue = 100;
+      progress.style.width = '100%';
+      setTimeout(() => {
+        progressBar.style.display = 'none';
+      }, 500);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const allInstrumentsCheckbox = document.getElementById('allInstruments');
+      const instrumentCheckboxes = document.querySelectorAll('input[name="instrument"]');
+
+      allInstrumentsCheckbox.addEventListener('change', function() {
+        instrumentCheckboxes.forEach(cb => {
+          cb.checked = allInstrumentsCheckbox.checked;
+        });
+      });
+
+      instrumentCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+          if (!cb.checked && allInstrumentsCheckbox.checked) {
+            allInstrumentsCheckbox.checked = false;
+          }
+          // If all are checked, check ALL
+          const allChecked = Array.from(instrumentCheckboxes).every(c => c.checked);
+          if (allChecked) allInstrumentsCheckbox.checked = true;
+        });
+      });
+    });
+
+    form.onsubmit = async function(e) {
       e.preventDefault();
       errorDiv.style.display = 'none';
       player.style.display = 'none';
+      waveformDiv.innerHTML = '';
       loading.style.display = 'inline';
       btn.disabled = true;
+      instrumentDisplay.textContent = '';
+      startProgressBar();
       try {
-        const response = await fetch('/generate', { method: 'POST' });
+        const selectedInstruments = Array.from(instrumentCheckboxes).filter(cb => cb.checked).map(input => input.value);
+        const length = document.getElementById('lengthSelect').value;
+        const response = await fetch('/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruments: selectedInstruments, length })
+        });
         loading.style.display = 'none';
         btn.disabled = false;
+        finishProgressBar();
         if (!response.ok) {
           const data = await response.json();
           errorDiv.textContent = data.error || 'Music generation failed.';
           errorDiv.style.display = 'block';
           return;
         }
+        // Get instrument from response header if present
+        const usedInstrument = response.headers.get('X-Instrument') || selectedInstruments.join(', ');
+        instrumentDisplay.textContent = 'Instrument: ' + (usedInstrument.charAt(0).toUpperCase() + usedInstrument.slice(1));
         // Create a blob URL for the audio
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         player.src = url;
         player.style.display = 'block';
         player.load();
-        player.play();
+        // Waveform visualization
+        if (wavesurfer) {
+          wavesurfer.destroy();
+        }
+        wavesurfer = WaveSurfer.create({
+          container: '#waveform',
+          waveColor: '#3a3a7a',
+          progressColor: '#6a7cff',
+          height: 80,
+          responsive: true,
+          barWidth: 2,
+          barGap: 2,
+        });
+        wavesurfer.load(url);
+        // Sync play/pause between audio and waveform
+        player.onplay = () => wavesurfer.play();
+        player.onpause = () => wavesurfer.pause();
+        wavesurfer.on('play', () => { if (player.paused) player.play(); });
+        wavesurfer.on('pause', () => { if (!player.paused) player.pause(); });
+        // Sync position
+        player.ontimeupdate = () => {
+          if (Math.abs(player.currentTime - wavesurfer.getCurrentTime()) > 0.1) {
+            wavesurfer.setTime(player.currentTime);
+          }
+        };
+        wavesurfer.on('seek', (progress) => {
+          player.currentTime = progress * player.duration;
+        });
       } catch (err) {
         loading.style.display = 'none';
         btn.disabled = false;
+        finishProgressBar();
         errorDiv.textContent = 'An error occurred: ' + err;
         errorDiv.style.display = 'block';
       }
     };
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/service-worker.js');
+      });
+    }
   </script>
 </body>
 </html>

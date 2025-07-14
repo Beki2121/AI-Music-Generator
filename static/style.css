@@ -1,27 +1,68 @@
 body {
   font-family: 'Segoe UI', Arial, sans-serif;
-  background: #f7f7fa;
+  background: linear-gradient(120deg, #f7f7fa 0%, #e3e6f3 100%);
   color: #222;
   margin: 0;
   padding: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 32px rgba(60,60,120,0.12);
+  padding: 40px 32px 32px 32px;
+  max-width: 400px;
+  width: 100%;
   text-align: center;
 }
 
 h1 {
-  margin-top: 40px;
+  margin-top: 0;
   color: #3a3a7a;
+  font-size: 2em;
+  letter-spacing: 1px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #444;
+}
+
+select {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #bbb;
+  font-size: 1em;
+  margin-bottom: 18px;
+  width: 100%;
+  max-width: 220px;
 }
 
 button {
-  background: #3a3a7a;
+  background: linear-gradient(90deg, #3a3a7a 60%, #6a7cff 100%);
   color: #fff;
   border: none;
   padding: 14px 32px;
   border-radius: 6px;
   font-size: 1.1em;
   cursor: pointer;
-  margin-top: 20px;
-  transition: background 0.2s;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 8px rgba(60,60,120,0.08);
 }
 
 button:disabled {
@@ -32,13 +73,52 @@ button:disabled {
 #loading {
   margin-left: 10px;
   font-style: italic;
+  color: #007bff;
+  display: none;
 }
 
 #error {
   margin-top: 20px;
+  color: #e74c3c;
+  display: none;
+}
+
+#instrumentDisplay {
+  margin-top: 18px;
+  font-weight: 500;
+  color: #3a3a7a;
+  font-size: 1.1em;
 }
 
 audio {
   margin-top: 30px;
-  width: 350px;
+  width: 100%;
+  max-width: 350px;
+}
+
+.progress-bar {
+  width: 100%;
+  background: #e3e6f3;
+  border-radius: 8px;
+  height: 12px;
+  margin: 18px 0 10px 0;
+  overflow: hidden;
+  display: none;
+}
+.progress {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3a3a7a 60%, #6a7cff 100%);
+  border-radius: 8px;
+  transition: width 0.2s;
+}
+
+@media (max-width: 600px) {
+  .card {
+    padding: 18px 6px 18px 6px;
+    max-width: 98vw;
+  }
+  audio {
+    max-width: 98vw;
+  }
 }

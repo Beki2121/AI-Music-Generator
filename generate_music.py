@@ -34,22 +34,40 @@ def generate_sequence(model, note_to_int, int_to_note, num_notes=300):
         pattern = pattern[1:]  # Move window forward
     return prediction_output
 
-def create_midi_from_notes(notes, output_file='output/generated.mid'):
+def create_midi_from_notes(notes, output_file='output/generated.mid', instrument_name=None):
     from music21 import stream, note, chord, instrument
     import random
     midi_stream = stream.Stream()
     # List of realistic instruments
-    instruments = [
-        instrument.Piano(),
-        instrument.Violin(),
-        instrument.Guitar(),
-        instrument.Flute(),
-        instrument.Trumpet(),
-        instrument.Clarinet(),
-    ]
-    chosen_instrument = random.choice(instruments)
-    midi_stream.insert(0, chosen_instrument)
+    instruments = {
+        'Piano': instrument.Piano(),
+        'Violin': instrument.Violin(),
+        'Guitar': instrument.Guitar(),
+        'Flute': instrument.Flute(),
+        'Trumpet': instrument.Trumpet(),
+        'Clarinet': instrument.Clarinet(),
+        'Oboe': instrument.Oboe(),
+        'Tuba': instrument.Tuba(),
+        'Bassoon': instrument.Bassoon(),
+    }
+    instrument_names = list(instruments.keys())
+    if instrument_name == 'mixed':
+        chosen_instrument = None  # Will be handled per note
+        used_instrument = 'Mixed'
+        midi_stream.insert(0, instrument.Piano())  # Default for the stream
+    elif instrument_name and instrument_name in instruments:
+        chosen_instrument = instruments[instrument_name]
+        used_instrument = instrument_name
+        midi_stream.insert(0, chosen_instrument)
+    else:
+        chosen_instrument = random.choice(list(instruments.values()))
+        used_instrument = [k for k, v in instruments.items() if v == chosen_instrument][0]
+        midi_stream.insert(0, chosen_instrument)
     for element in notes:
+        if instrument_name == 'mixed':
+            # Randomly select an instrument for each note/chord
+            inst = random.choice(list(instruments.values()))
+            midi_stream.append(inst.__class__())
         if '.' in element:
             # Chord: convert each number to an integer, then to a pitch (C4 as base, MIDI 60)
             chord_notes = []
@@ -72,8 +90,11 @@ def create_midi_from_notes(notes, output_file='output/generated.mid'):
                     midi_stream.append(pitch)
                 except Exception:
                     continue
-    midi_stream.write('midi', fp=output_file)
-    return output_file
+    if output_file:
+        midi_stream.write('midi', fp=output_file)
+        return output_file, used_instrument
+    else:
+        return midi_stream, used_instrument
 
 def midi_to_audio(midi_path='output/generated.mid', audio_path='output/generated.wav'):
     midi_data = pretty_midi.PrettyMIDI(midi_path)
@@ -82,9 +103,11 @@ def midi_to_audio(midi_path='output/generated.mid', audio_path='output/generated
     sf.write(audio_path, audio, samplerate=44100)
     return audio_path
 
-def generate_and_save_music():
+def generate_and_save_music(instrument_names=None, length_seconds=60):
     """
-    Generates music using the trained model, saves MIDI and WAV files in static/audio/, and returns the WAV file path.
+    Generates music using the trained model, saves MIDI and WAV files in static/audio/, and returns the WAV file path and instrument(s) used.
+    instrument_names: list of instrument names (strings)
+    length_seconds: approximate duration in seconds for the generated music
     """
     import os
     output_dir = os.path.join('static', 'audio')
@@ -97,7 +120,22 @@ def generate_and_save_music():
     if not os.path.exists(model_path) or not os.path.exists(pitch_path):
         raise FileNotFoundError('Model or pitch names file not found. Please train the model first.')
     model, pitchnames, note_to_int, int_to_note = load_model_and_data(model_path, pitch_path)
-    notes = generate_sequence(model, note_to_int, int_to_note, num_notes=120)
-    create_midi_from_notes(notes, output_file=midi_path)
+    # Estimate: 1 note ≈ 0.5 seconds (adjust as needed)
+    num_notes = max(10, int(length_seconds / 0.5))
+    # If no instruments or only 'mixed', use mixed mode
+    if not instrument_names or (len(instrument_names) == 1 and instrument_names[0] == 'mixed'):
+        notes = generate_sequence(model, note_to_int, int_to_note, num_notes=num_notes)
+        _, used_instrument = create_midi_from_notes(notes, output_file=midi_path, instrument_name='mixed')
+    else:
+        from music21 import stream
+        midi_stream = stream.Stream()
+        used_instruments = []
+        for inst_name in instrument_names:
+            notes = generate_sequence(model, note_to_int, int_to_note, num_notes=num_notes)
+            part, used_inst = create_midi_from_notes(notes, output_file=None, instrument_name=inst_name)
+            midi_stream.append(part)
+            used_instruments.append(used_inst)
+        midi_stream.write('midi', fp=midi_path)
+        used_instrument = ', '.join(used_instruments)
     midi_to_audio(midi_path, audio_path=wav_path)
-    return wav_path
+    return wav_path, used_instrument
