@@ -1,0 +1,6 @@
+# requirements.txt
+flask
+music21
+tensorflow
+pretty_midi
+soundfile
