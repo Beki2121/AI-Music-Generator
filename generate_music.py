@@ -65,11 +65,9 @@ def create_midi_from_notes(notes, output_file='output/generated.mid', instrument
         midi_stream.insert(0, chosen_instrument)
     for element in notes:
         if instrument_name == 'mixed':
-            # Randomly select an instrument for each note/chord
             inst = random.choice(list(instruments.values()))
             midi_stream.append(inst.__class__())
         if '.' in element:
-            # Chord: convert each number to an integer, then to a pitch (C4 as base, MIDI 60)
             chord_notes = []
             for n in element.split('.'):
                 try:
@@ -83,7 +81,6 @@ def create_midi_from_notes(notes, output_file='output/generated.mid', instrument
             try:
                 midi_stream.append(note.Note(element))
             except Exception:
-                # If element is a number, treat as MIDI offset from C4
                 try:
                     pitch = note.Note()
                     pitch.midi = 60 + int(element)
